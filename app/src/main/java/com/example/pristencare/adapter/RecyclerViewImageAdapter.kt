@@ -1,24 +1,24 @@
 package com.example.pristencare.adapter
 
 import android.util.Log
-import android.view.LayoutInflater
 import android.view.ViewGroup
-import androidx.databinding.DataBindingUtil
-import androidx.databinding.ViewDataBinding
-import androidx.lifecycle.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.OnLifecycleEvent
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.example.pristencare.BR
-import com.example.pristencare.ItemViewModel
-import com.example.pristencare.R
-import com.example.pristencare.model.Photo
+import com.example.pristencare.ItemData
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 
 @ExperimentalCoroutinesApi
-class RecyclerViewImageAdapter(val lifecycle: LifecycleOwner) :
+class RecyclerViewImageAdapter(
+    val lifecycle: LifecycleOwner,
+    val tickFlow: Flow<Int>
+) :
     RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-    private val itemList = arrayListOf<Photo>()
-    private val itemViewModel = arrayListOf<ItemViewModel>()
+    private val itemData = arrayListOf<ItemData>()
     private var recyclerView: RecyclerView? = null
 
 
@@ -29,11 +29,8 @@ class RecyclerViewImageAdapter(val lifecycle: LifecycleOwner) :
                 recyclerView?.let { parent ->
                     val childCount = parent.childCount
                     for (i in 0 until childCount) {
-                        parent.getChildAt(i)?.let {
-                            (parent.getChildViewHolder(it) as MyViewHolder)
-                                .run {
-                                    onDestroy()
-                                }
+                        parent.findViewHolderForLayoutPosition(i)?.let {
+                            (it as BaseViewHolder).setOnDestroy()
                         }
                     }
                 }
@@ -45,11 +42,8 @@ class RecyclerViewImageAdapter(val lifecycle: LifecycleOwner) :
                 recyclerView?.let { parent ->
                     val childCount = parent.childCount
                     for (i in 0 until childCount) {
-                        parent.getChildAt(i)?.let {
-                            (parent.getChildViewHolder(it) as MyViewHolder)
-                                .run {
-                                    onStop()
-                                }
+                        parent.findViewHolderForLayoutPosition(i)?.let {
+                            (it as BaseViewHolder).setOnStop()
                         }
                     }
                 }
@@ -67,7 +61,7 @@ class RecyclerViewImageAdapter(val lifecycle: LifecycleOwner) :
                         if (first in 0..last)
                             for (i in first..last) {
                                 findViewHolderForAdapterPosition(i)?.let {
-                                    (it as MyViewHolder).onStart()
+                                    (it as BaseViewHolder).setOnStart()
                                 }
                             }
                     }
@@ -79,88 +73,33 @@ class RecyclerViewImageAdapter(val lifecycle: LifecycleOwner) :
 
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-
-        val binding = DataBindingUtil.inflate(
-            LayoutInflater.from(parent.context),
-            R.layout.image_item,
-            parent,
-            false
-        ) as ViewDataBinding
-        return MyViewHolder(binding, lifecycle)
+        val view = ItemData(parent.context, null, 0, tickFlow)
+        return BaseViewHolder(view)
     }
 
     override fun getItemCount(): Int {
-        return itemViewModel.count()
+        return itemData.count()
     }
 
-    fun setListData(itemViewModel: List<ItemViewModel>) {
-        this.itemViewModel.addAll(itemViewModel)
+    fun setListData(itemData: List<ItemData>) {
+        this.itemData.addAll(itemData)
         notifyDataSetChanged()
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        (holder as MyViewHolder).bind(position)
+        (holder as BaseViewHolder).bind(position)
     }
-
-
-    @ExperimentalCoroutinesApi
-    inner class MyViewHolder(private val binding: ViewDataBinding, val parentLife: LifecycleOwner) :
-        RecyclerView.ViewHolder(binding.root), LifecycleOwner {
-
-        private val lifecycleRegistry = LifecycleRegistry(this)
-
-        init {
-            binding.lifecycleOwner = this
-            lifecycleRegistry.currentState = Lifecycle.State.INITIALIZED
-            lifecycleRegistry.currentState = Lifecycle.State.CREATED /// ON_CREATE EVENTS
-            Log.i("init", ": Called ---------->> ")
-
-        }
-
-        fun bind(position: Int) {
-            Log.d("bind", "bind:  -============================================>>>>    ${lifecycleRegistry.currentState} ")
-            Log.i("bind", "bind:  -============================================>>>>    $position   $absoluteAdapterPosition")
-
-            itemViewModel[absoluteAdapterPosition].lifecycleRegistry = lifecycleRegistry
-            itemViewModel[absoluteAdapterPosition].position = absoluteAdapterPosition
-            lifecycleRegistry.addObserver(itemViewModel[absoluteAdapterPosition])
-            binding.setVariable(BR.itemViewModel, itemViewModel[absoluteAdapterPosition])
-            binding.executePendingBindings()
-        }
-
-        override fun getLifecycle(): Lifecycle {
-            return lifecycleRegistry
-        }
-
-
-        fun onStart() {
-            lifecycleRegistry.currentState = Lifecycle.State.STARTED     //
-            lifecycleRegistry.currentState = Lifecycle.State.RESUMED     //   ON_RESUME EVENT
-        }
-
-        fun onStop() {
-            lifecycleRegistry.currentState = Lifecycle.State.STARTED    //
-            lifecycleRegistry.currentState = Lifecycle.State.CREATED    //     ON_STOP EVENT
-        }
-
-        fun onDestroy() {
-            lifecycleRegistry.currentState = Lifecycle.State.DESTROYED   ///  ON_DESTROY EVENT
-            itemViewModel[absoluteAdapterPosition].doCancel(absoluteAdapterPosition)
-        }
-
-    }
-
 
     override fun onViewAttachedToWindow(holder: RecyclerView.ViewHolder) {
         super.onViewAttachedToWindow(holder)
-        (holder as MyViewHolder).onStart()
+        Log.i("TAG", "onViewAttachedToWindow ====  ${holder.getAbsoluteAdapterPosition()} ")
+        (holder as BaseViewHolder).setOnStart()
     }
 
     override fun onViewDetachedFromWindow(holder: RecyclerView.ViewHolder) {
         super.onViewDetachedFromWindow(holder)
-        (holder as MyViewHolder).apply {
-            onStop()
-        }
+        Log.i("TAG", "onViewDetachedFromWindow ====  ${holder.getAbsoluteAdapterPosition()} ")
+        (holder as BaseViewHolder).setOnStop()
     }
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {

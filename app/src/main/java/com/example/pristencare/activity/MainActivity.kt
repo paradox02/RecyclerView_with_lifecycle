@@ -1,10 +1,12 @@
 package com.example.pristencare.activity
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.Observer
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.pristencare.*
@@ -18,6 +20,9 @@ import com.example.pristencare.utils.IResult
 import com.example.pristencare.viewmodel.MainActivityViewMOdelFactory
 import com.example.pristencare.viewmodel.MainActivityViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
 
 const val LIST = 0
@@ -29,6 +34,7 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
 
     private lateinit var binding: ActivityMainBinding
 
+    val tick = MutableSharedFlow<Int>()
 
     private lateinit var endlessScrollListener: EndlessScrollListener
 
@@ -45,7 +51,7 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
 
     private val itemList = arrayListOf<Photo>()
 
-    private val Imageadapter by lazy { RecyclerViewImageAdapter(this) }
+    private val Imageadapter by lazy { RecyclerViewImageAdapter(this, tick) }
 
     @Inject
     @MainRetrofit
@@ -63,11 +69,24 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
         setupObserver()
         setupLayoutManager()
         doApiCall()
-        setupClickListener()
+        viewModel.changeLayoutManager(LIST to GridLayoutManager(this, 1))
 
+        binding.button.setOnClickListener {
+            Intent(this, SecondActivity::class.java)?.let {
+                startActivity(it)
+            }
+        }
     }
 
     private fun setupObserver() {
+        var item = 0
+
+        lifecycleScope.launchWhenStarted {
+            while (true) {
+                delay(1000)
+                tick.emit(item++)
+            }
+        }
 
         viewModel.images.observe(this, Observer {
             when (it) {
@@ -77,12 +96,9 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
                 is IResult.Success -> {
                     try {
                         it.data?.photos?.let {
-                            val start = it.page.minus(1) * 10
-                            val end = start + 9
-                            val list = arrayListOf<Photo>()
-                            val itemViewModelList = arrayListOf<ItemViewModel>()
+                            val itemViewModelList = arrayListOf<ItemData>()
                             it.photo.forEach {
-                                itemViewModelList.add(ItemViewModel(it, itemViewModelRetrofit))
+                                itemViewModelList.add(ItemData(this, null, 0, tick))
                             }
                             Imageadapter.setListData(itemViewModelList)
 
@@ -105,20 +121,6 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
             setupLayoutManager()
         })
 
-    }
-
-    private fun setupScrollListener(managerType: Int) {
-        when (managerType) {
-            GRID_2 -> {
-                viewModel.changeLayoutManager(GRID_2 to GridLayoutManager(this, 2))
-            }
-            GRID_3 -> {
-                viewModel.changeLayoutManager(GRID_3 to GridLayoutManager(this, 3))
-            }
-            else -> {
-                viewModel.changeLayoutManager(LIST to GridLayoutManager(this, 1))
-            }
-        }
     }
 
     private fun setupLayoutManager() {
@@ -145,19 +147,6 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
         binding.rlvImages.addOnScrollListener(endlessScrollListener)
     }
 
-
-    private fun setupClickListener() {
-        binding.grid2.setOnClickListener {
-            setupScrollListener(GRID_2)
-        }
-        binding.grid3.setOnClickListener {
-            setupScrollListener(GRID_3)
-
-        }
-        binding.list.setOnClickListener {
-            setupScrollListener(LIST)
-        }
-    }
 
     override fun onStart() {
         super.onStart()
